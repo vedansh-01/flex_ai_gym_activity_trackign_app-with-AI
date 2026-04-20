@@ -1,0 +1,13 @@
+{
+  "name": "flexai-app",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && node index.js",
+    "frontend": "cd frontend && npx expo start --clear",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"cd backend && npx nodemon index.js\" \"cd frontend && npx expo start --clear\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
