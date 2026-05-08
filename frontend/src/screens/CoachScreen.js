@@ -4,7 +4,7 @@ import {
   FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { API_URL } from '../apiConfig';
 
 const CHAT_API = `${API_URL}/chat`;
@@ -22,7 +22,7 @@ export default function CoachScreen({ onBack }) {
 
   const loadHistory = async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${CHAT_API}/history`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -44,7 +44,7 @@ export default function CoachScreen({ onBack }) {
     setIsLoading(true);
 
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${CHAT_API}/send`, {
         method: 'POST',
         headers: {

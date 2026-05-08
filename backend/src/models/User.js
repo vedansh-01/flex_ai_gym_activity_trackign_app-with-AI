@@ -35,12 +35,16 @@ const userSchema = new mongoose.Schema({
     takesCreatine:  { type: Boolean, default: false },
     creatineDose:   { type: Number, default: 0 },    // grams
     waterGoal:      { type: Number, default: 2500 }, // ml
+    workoutTime:    { type: String, default: "17:00" }, // HH:MM format
   },
   isOnboarded: { type: Boolean, default: false },
   createdAt: {
     type: Date,
     default: Date.now,
   },
+  isVerified: { type: Boolean, default: false },
+  otp: { type: String, default: null },
+  otpExpires: { type: Date, default: null },
 });
 
 // Hash password before saving

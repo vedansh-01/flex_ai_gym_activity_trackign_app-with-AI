@@ -8,7 +8,7 @@ import {
   View, Text, TouchableOpacity, TextInput,
   StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { calcCaloriesAdvanced } from '../utils/fitnessCalc';
 import { EXERCISES } from '../data/exercises';
@@ -129,7 +129,7 @@ export default function RecentWorkoutsSection({
   const saveEdit = useCallback(async (workoutId) => {
     setSaving(true);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
 
       // Convert string inputs back to numbers
       const exercises = editData.exercises.map(ex => ({
@@ -181,7 +181,7 @@ export default function RecentWorkoutsSection({
   const deleteWorkout = async (id) => {
     setDeleting(id);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res   = await fetch(`${API_URL}/workouts/${id}`, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },

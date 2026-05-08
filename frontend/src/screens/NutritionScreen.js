@@ -6,10 +6,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { getMacroTargets } from '../utils/fitnessCalc';
 
 import { API_URL } from '../apiConfig';
+import { loadFoodDatabase } from '../utils/foodLoader';
 // Fallbacks used only before profile loads
 const DEFAULT_CALORIE_GOAL = 2100;
 const DEFAULT_MACRO_GOALS  = { protein: 160, carbs: 220, fat: 65 };
@@ -127,6 +128,15 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
   const [results, setResults]   = useState([]);
   const [busy, setBusy]         = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [allFoods, setAllFoods] = useState([]);
+
+  useEffect(() => {
+    const fetchFoods = async () => {
+      const data = await loadFoodDatabase();
+      setAllFoods(data);
+    };
+    fetchFoods();
+  }, []);
 
   // Reset when modal opens
   useEffect(() => {
@@ -147,15 +157,28 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
     return () => clearTimeout(t);
   }, [query]);
 
-  const doSearch = async (q) => {
+  const doSearch = (q) => {
     setBusy(true);
-    try {
-      const token = await SecureStore.getItemAsync('userToken');
-      const res = await fetch(`${API_URL}/foods/search?q=${encodeURIComponent(q)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) setResults(await res.json());
-    } catch (e) { console.log('search err', e); } finally { setBusy(false); }
+    const searchTerm = q.trim().toLowerCase();
+    
+    // Perform local search in the CSV-loaded data
+    const filtered = allFoods.filter(food => 
+      food.name.toLowerCase().includes(searchTerm)
+    )
+    .sort((a, b) => {
+      // Prioritize exact matches or start-of-word matches
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      const aStart = aName.startsWith(searchTerm);
+      const bStart = bName.startsWith(searchTerm);
+      if (aStart && !bStart) return -1;
+      if (!aStart && bStart) return 1;
+      return aName.length - bName.length;
+    })
+    .slice(0, 25);
+
+    setResults(filtered);
+    setBusy(false);
   };
 
   const selectFood = (food) => {
@@ -242,7 +265,7 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
               style={s.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search 1,000+ Indian dishes..."
+              placeholder="Search 1,000+ local food items..."
               placeholderTextColor="#3F3F46"
               returnKeyType="search"
             />
@@ -414,7 +437,7 @@ export default function NutritionScreen() {
 
   const loadProfile = async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -428,7 +451,7 @@ export default function NutritionScreen() {
   const loadHistory = async () => {
     setLoading(true);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/meals?days=3`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -447,7 +470,7 @@ export default function NutritionScreen() {
 
   const handleSave = async (data) => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const payload = {
         name: editing ? editing.cat : modal,
         foods: [{
@@ -485,7 +508,7 @@ export default function NutritionScreen() {
 
   const handleDelete = async (id) => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/meals/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
@@ -511,7 +534,7 @@ export default function NutritionScreen() {
 
   const loadWater = async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/water/today`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -525,7 +548,7 @@ export default function NutritionScreen() {
 
   const handleAddWater = async (amount) => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/water`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -537,7 +560,7 @@ export default function NutritionScreen() {
 
   const handleDeleteWater = async (id) => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/water/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }

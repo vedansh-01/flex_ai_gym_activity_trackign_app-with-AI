@@ -1,11 +1,12 @@
 # Task List: FlexAI Implementation
 
 - [x] **Week 1: Foundation**
-    - [x] Initialize Repository (Backend & Expo Frontend)
-    - [x] Setup Express Server with MongoDB (Mongoose)
-    - [x] Setup Expo React Native + NativeWind + Navigation
-    - [x] Implement User Registration & Login (SecureStore)
-    - [x] Design Auth & Profile Dashboard UI
+    - [x] Initialize- [x] Configure backend and frontend for local environment
+- [/] Resolve MongoDB connection issues (Bypassing with Mock Mode for testing)
+- [x] Fix web platform crashes in frontend (SecureStore fallback)
+- [/] Run Expo server for mobile testing
+- [x] Implement User Registration & Login (SecureStore)
+- [x] Design Auth & Profile Dashboard UI
 
 - [x] **Week 2: Tracking Core**
     - [x] Build Workout Logger (Exercises, Sets, Reps)

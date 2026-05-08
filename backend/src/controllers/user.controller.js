@@ -79,7 +79,7 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   const { 
     name, age, gender, weight, height, activityLevel, 
-    goal, weeklyLossGoal, takesCreatine, creatineDose 
+    goal, weeklyLossGoal, takesCreatine, creatineDose, workoutTime 
   } = req.body;
 
   try {
@@ -101,6 +101,7 @@ const updateProfile = async (req, res) => {
     }
     if (takesCreatine !== undefined) user.profile.takesCreatine = !!takesCreatine;
     if (creatineDose !== undefined)   user.profile.creatineDose  = Number(creatineDose) || 0;
+    if (workoutTime)                 user.profile.workoutTime   = workoutTime;
 
     // Recalculate BMR, TDEE, and targetCalories whenever we have all required fields
     const p = user.profile;

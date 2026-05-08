@@ -1,0 +1,125 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import * as storage from '../src/utils/storage';
+
+import AuthScreen       from '../src/screens/AuthScreen';
+import OnboardingScreen from '../src/screens/OnboardingScreen';
+import TabNavigator     from '../src/navigation/TabNavigator';
+
+import { API_URL } from '../src/apiConfig';
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Root Gate — controls which screen renders.
+//
+//  State machine:
+//    loading  → initial token/session check
+//    auth     → no token, or token invalid / user not verified
+//    onboarding → token valid + user verified, but profile not complete
+//    app      → token valid + verified + onboarded ✓
+//
+//  IMPORTANT: Users can NEVER jump from 'auth' → 'app' skipping 'onboarding'.
+//  The server enforces this via isVerified and isOnboarded flags.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function Index() {
+  const [screen, setScreen] = useState<'loading' | 'auth' | 'onboarding' | 'app'>('loading');
+
+  useEffect(() => { checkSession(); }, []);
+
+  async function checkSession() {
+    try {
+      const token = await storage.getItem('userToken');
+      if (!token) { setScreen('auth'); return; }
+
+      const res = await fetch(`${API_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const user = await res.json();
+        // Double-check on the client too — isVerified is enforced server-side
+        // but this prevents a flash of the wrong screen
+        if (!user.isVerified) {
+          await storage.deleteItem('userToken');
+          setScreen('auth');
+          return;
+        }
+        // isOnboarded is only true after the profile PUT succeeds server-side
+        setScreen(user.isOnboarded ? 'app' : 'onboarding');
+      } else {
+        // 401/403 — token expired, revoked, or account unverified
+        await storage.deleteItem('userToken');
+        setScreen('auth');
+      }
+    } catch {
+      // Network unavailable: if a token exists assume valid session to avoid
+      // locking the user out while offline, but they can't access API data anyway
+      const token = await storage.getItem('userToken');
+      setScreen(token ? 'app' : 'auth');
+    }
+  }
+
+  // Called by AuthScreen after OTP verification succeeds
+  async function handleLoginSuccess(token: string) {
+    try {
+      const res = await fetch(`${API_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const user = await res.json();
+        setScreen(user.isOnboarded ? 'app' : 'onboarding');
+      } else {
+        // Profile fetch failed — send to onboarding as safe default
+        setScreen('onboarding');
+      }
+    } catch {
+      setScreen('onboarding');
+    }
+  }
+
+  async function handleLogout() {
+    await storage.deleteItem('userToken');
+    setScreen('auth');
+  }
+
+  // Onboarding complete callback — only called after server confirms profile save
+  function handleOnboardingComplete() {
+    setScreen('app');
+  }
+
+  return (
+    <View style={styles.root}>
+      {screen === 'loading' && (
+        <View style={styles.splash}>
+          <Text style={styles.logo}>Flex<Text style={styles.accent}>AI</Text></Text>
+          <ActivityIndicator color="#FF5722" style={{ marginTop: 24 }} />
+        </View>
+      )}
+
+      {screen === 'auth' && (
+        <AuthScreen onLoginSuccess={handleLoginSuccess} />
+      )}
+
+      {/* Onboarding: user is verified but has NOT completed profile yet.
+          The Sign Out button is the ONLY exit — no skip, no back to app. */}
+      {screen === 'onboarding' && (
+        <OnboardingScreen
+          onComplete={handleOnboardingComplete}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {/* App: only rendered when both isVerified AND isOnboarded are true */}
+      {screen === 'app' && (
+        <TabNavigator onLogout={handleLogout} />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: '#0C0C0C' },
+  splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  logo:   { color: '#fff', fontSize: 42, fontWeight: '900', letterSpacing: -1 },
+  accent: { color: '#FF5722' },
+});

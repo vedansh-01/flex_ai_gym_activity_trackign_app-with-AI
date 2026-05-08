@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, StyleSheet, StatusBar, Alert, ActivityIndicator
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { ACTIVITY_LEVELS, calculateBMR, calculateTDEE, calculateWaterGoal } from '../utils/fitnessCalc';
 
@@ -86,7 +86,7 @@ export default function OnboardingScreen({ onComplete, onLogout }) {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/users/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -105,17 +105,26 @@ export default function OnboardingScreen({ onComplete, onLogout }) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'Server error' }));
-        console.error('Profile save failed:', err.message);
-        // Still proceed — user can fix in Profile screen later
-      } else {
-        const saved = await res.json();
-        console.log('✅ Profile saved:', saved.profile?.tdee, 'kcal TDEE');
+        // ⛔ Block completion — user must fix and try again
+        Alert.alert(
+          'Save Failed',
+          `Could not save your profile: ${err.message}\n\nPlease check your connection and try again.`
+        );
+        setSaving(false);
+        return; // Do NOT call onComplete
       }
+
+      const saved = await res.json();
+      console.log('✅ Profile saved:', saved.profile?.tdee, 'kcal TDEE');
+      // Only proceed to the app after a confirmed server save
+      if (typeof onComplete === 'function') onComplete();
     } catch (e) {
-      console.error('Onboarding network error:', e.message);
+      Alert.alert(
+        'Network Error',
+        'Could not reach the server. Please check your connection and try again.'
+      );
     } finally {
       setSaving(false);
-      if (typeof onComplete === 'function') onComplete();
     }
   };
 

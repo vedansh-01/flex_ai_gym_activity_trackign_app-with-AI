@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "bde4b00e-986b-4a7e-ac9d-8da18357f2cf"
+      }
+    },
+    "android": {
+      "package": "com.khuntetavedansh.flexaiapp"
+    }
+  }
+}

@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   SafeAreaView, Alert, StatusBar
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import MuscleModelSVG from '../components/MuscleModelSVG';
 import { EXERCISES, MUSCLE_GROUPS, calculateCaloriesPerSet, calculateTotalCalories } from '../data/exercises';
 import RecentWorkoutsSection from '../components/RecentWorkoutsSection';
@@ -81,7 +81,7 @@ export default function WorkoutLoggerScreen({ navigation }) {
   useEffect(() => {
     (async () => {
       try {
-        const token = await SecureStore.getItemAsync('userToken');
+        const token = await storage.getItem('userToken');
         const res = await fetch(`${API_URL}/users/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -97,7 +97,7 @@ export default function WorkoutLoggerScreen({ navigation }) {
 
   const fetchRecentWorkouts = useCallback(async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res = await fetch(`${API_URL}/workouts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -206,7 +206,7 @@ export default function WorkoutLoggerScreen({ navigation }) {
 
     setSaving(true);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const exercises = Object.entries(activeSets).map(([id, sets]) => {
         const exercise = EXERCISES.find(e => e.id === id);
         return {

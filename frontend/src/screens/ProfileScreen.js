@@ -3,9 +3,10 @@ import {
   View, Text, TouchableOpacity, TextInput, ScrollView,
   SafeAreaView, StyleSheet, StatusBar, Alert, ActivityIndicator
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { Ionicons } from '@expo/vector-icons';
 import { ACTIVITY_LEVELS, calculateBMR, calculateTDEE, getMacroTargets, calculateBMI } from '../utils/fitnessCalc';
+import * as notificationService from '../utils/notificationService';
 
 import { API_URL } from '../apiConfig';
 
@@ -31,7 +32,7 @@ const WEEKLY_LOSS_OPTIONS = [
 
 // All 4 options available for both weight_loss and body_recomposition
 
-export default function ProfileScreen({ onSaved }) {
+export default function ProfileScreen({ onSaved, onLogout }) {
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState(false);
   const [profile, setProfile]           = useState(null);
@@ -46,6 +47,8 @@ export default function ProfileScreen({ onSaved }) {
   const [weeklyLossGoal, setWeeklyLoss] = useState(null);
   const [takesCreatine, setTakesCreatine] = useState(false);
   const [creatineDose, setCreatineDose]   = useState('5');
+  const [workoutTime, setWorkoutTime]     = useState('17:00');
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
 
   const needsLossStep = goal === 'weight_loss' || goal === 'body_recomposition';
   const lossOptions   = WEEKLY_LOSS_OPTIONS; // all 4 options for both goals
@@ -54,7 +57,7 @@ export default function ProfileScreen({ onSaved }) {
 
   const fetchProfile = async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res   = await fetch(`${API_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -71,6 +74,11 @@ export default function ProfileScreen({ onSaved }) {
         setWeeklyLoss(data.profile?.weeklyLossGoal ?? null);
         setTakesCreatine(!!data.profile?.takesCreatine);
         setCreatineDose(data.profile?.creatineDose?.toString() || '5');
+        setWorkoutTime(data.profile?.workoutTime || '17:00');
+
+        // Check if reminders are enabled in local storage
+        const reminders = await storage.getItem('reminders');
+        setRemindersEnabled(!!reminders && Object.keys(reminders).length > 0);
       }
     } catch (e) {
       console.log('Profile fetch error:', e);
@@ -79,10 +87,28 @@ export default function ProfileScreen({ onSaved }) {
     }
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await storage.deleteItem('userToken');
+            if (typeof onLogout === 'function') onLogout();
+          },
+        },
+      ]
+    );
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       const res   = await fetch(`${API_URL}/users/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -97,12 +123,19 @@ export default function ProfileScreen({ onSaved }) {
           weeklyLossGoal: needsLossStep ? weeklyLossGoal : null,
           takesCreatine,
           creatineDose: takesCreatine ? parseFloat(creatineDose) : 0,
+          workoutTime,
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setProfile(data);
-        Alert.alert('✅ Saved', 'Your profile has been updated.');
+
+        // Update notification if enabled
+        if (remindersEnabled) {
+          await notificationService.scheduleWorkoutReminder(workoutTime);
+        }
+
+        Alert.alert('✅ Saved', 'Your profile and workout reminder have been updated.');
         if (typeof onSaved === 'function') onSaved(); // tell TabNavigator to refresh dashboard
       } else {
         Alert.alert('Error', data.message || 'Failed to save.');
@@ -111,6 +144,24 @@ export default function ProfileScreen({ onSaved }) {
       Alert.alert('Network Error', 'Could not reach the server.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleReminders = async () => {
+    if (remindersEnabled) {
+      await notificationService.cancelAllReminders();
+      setRemindersEnabled(false);
+      Alert.alert('Notifications Disabled', 'All daily reminders have been removed.');
+    } else {
+      const success = await notificationService.setupDefaultReminders();
+      if (success) {
+        // Also schedule the personalized one
+        await notificationService.scheduleWorkoutReminder(workoutTime);
+        setRemindersEnabled(true);
+        Alert.alert('Notifications Enabled', 'Daily reminders for hydration, workout, and meals have been scheduled!');
+      } else {
+        Alert.alert('Permission Required', 'Please enable notifications in your device settings to use this feature.');
+      }
     }
   };
 
@@ -326,6 +377,25 @@ export default function ProfileScreen({ onSaved }) {
               <Text style={[s.listDesc, { textAlign: 'center' }]}>Based on weight, activity, and supplements</Text>
             </View>
           )}
+
+          <View style={{ marginTop: 20 }}>
+            <Text style={s.sectionTitle}>WORKOUT REMINDER</Text>
+            <View style={s.listCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.listLabel}>Set Workout Time</Text>
+                <Text style={s.listDesc}>We will notify you 15 minutes before this time</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TextInput
+                  style={[s.input, { marginBottom: 0, width: 80, textAlign: 'center', paddingVertical: 8 }]}
+                  value={workoutTime}
+                  onChangeText={setWorkoutTime}
+                  placeholder="17:00"
+                  placeholderTextColor="#3F3F46"
+                />
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* ── Save ── */}
@@ -334,6 +404,32 @@ export default function ProfileScreen({ onSaved }) {
             ? <ActivityIndicator color="#fff" />
             : <Text style={s.saveBtnText}>💾  Save Profile</Text>
           }
+        </TouchableOpacity>
+
+        {/* ── Notifications ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>APP SETTINGS</Text>
+          <TouchableOpacity 
+            style={[s.listCard, remindersEnabled && s.listCardActive]} 
+            onPress={toggleReminders}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="notifications" size={20} color={remindersEnabled ? '#FF5722' : '#A1A1AA'} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.listLabel, remindersEnabled && { color: '#FF5722' }]}>Daily Reminders</Text>
+              <Text style={s.listDesc}>Get notified for water, workouts, and logging meals</Text>
+            </View>
+            <View style={[s.toggleBtn, remindersEnabled && s.toggleBtnActive]}>
+              <Text style={[s.toggleTxt, remindersEnabled && { color: '#fff' }]}>{remindersEnabled ? 'ON' : 'OFF'}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Logout ── */}
+        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+          <Text style={s.logoutBtnText}>Sign Out</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -388,8 +484,13 @@ const s = StyleSheet.create({
   macroCard: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#27272A', borderRadius: 16, padding: 16, marginBottom: 20 },
   macroRow:  { flexDirection: 'row', marginTop: 12 },
 
-  saveBtn:    { backgroundColor: '#FF5722', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  saveBtn:    { backgroundColor: '#FF5722', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
   saveBtnText:{ color: '#fff', fontWeight: '800', fontSize: 16 },
+
+  logoutBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                   borderWidth: 1, borderColor: '#3F1212', backgroundColor: '#1A0A0A',
+                   borderRadius: 14, paddingVertical: 14, marginBottom: 32 },
+  logoutBtnText: { color: '#EF4444', fontWeight: '700', fontSize: 15 },
 
   toggleBtn: { backgroundColor: '#27272A', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   toggleBtnActive: { backgroundColor: '#FF5722' },

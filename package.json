@@ -4,10 +4,14 @@
   "scripts": {
     "start": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"npm run backend\" \"npm run frontend\"",
     "backend": "cd backend && node index.js",
-    "frontend": "cd frontend && npx expo start --clear",
-    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"cd backend && npx nodemon index.js\" \"cd frontend && npx expo start --clear\""
+    "frontend": "cd frontend && npx expo start --go --host lan --clear",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"cd backend && npx nodemon index.js\" \"cd frontend && npx expo start --go --host lan --clear\"",
+    "web": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"yellow,cyan\" \"cd backend && npx nodemon index.js\" \"cd frontend && npx expo start --web\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "docker": "^1.0.0"
   }
 }

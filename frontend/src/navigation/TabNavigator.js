@@ -47,7 +47,7 @@ export default function TabNavigator({ onLogout }) {
           <Text style={s.profileTitle}>My Profile</Text>
           <View style={{ width: 44 }} />
         </View>
-        <ProfileScreen onSaved={() => setDashRefreshKey(k => k + 1)} />
+        <ProfileScreen onSaved={() => setDashRefreshKey(k => k + 1)} onLogout={onLogout} />
       </View>
     );
   }

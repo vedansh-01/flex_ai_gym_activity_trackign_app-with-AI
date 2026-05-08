@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   SafeAreaView, RefreshControl, StatusBar, Dimensions
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as storage from '../utils/storage';
 import { WeightLineChart, WorkoutIntensityBarChart, CalorieRing } from '../components/Charts';
 import { getMacroTargets } from '../utils/fitnessCalc';
 
@@ -66,7 +66,7 @@ export default function DashboardScreen({ onOpenProfile }) {
 
   const loadDashboard = useCallback(async () => {
     try {
-      const token = await SecureStore.getItemAsync('userToken');
+      const token = await storage.getItem('userToken');
       if (!token) return;
 
       // Fetch user profile

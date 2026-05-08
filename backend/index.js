@@ -13,6 +13,14 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl || req.url} ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -34,3 +42,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Keep process alive
+setInterval(() => {}, 60000);
