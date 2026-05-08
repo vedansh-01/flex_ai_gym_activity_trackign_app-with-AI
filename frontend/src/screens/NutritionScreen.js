@@ -121,22 +121,13 @@ function MealSection({ mealKey, meal, onAddFood, onDeleteFood }) {
 // ─── Add Food Modal ───────────────────────────────────────────────────────────
 const EMPTY_FORM = { name:'', serving:'100', servingUnit:'g', calories:'', protein:'', carbs:'', fats:'' };
 
-function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialData }) {
+function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialData, allFoods }) {
   const [form, setForm]         = useState(EMPTY_FORM);
   const [baseline, setBaseline] = useState(null);
   const [query, setQuery]       = useState('');
   const [results, setResults]   = useState([]);
   const [busy, setBusy]         = useState(false);
   const [saving, setSaving]     = useState(false);
-  const [allFoods, setAllFoods] = useState([]);
-
-  useEffect(() => {
-    const fetchFoods = async () => {
-      const data = await loadFoodDatabase();
-      setAllFoods(data);
-    };
-    fetchFoods();
-  }, []);
 
   // Reset when modal opens
   useEffect(() => {
@@ -409,6 +400,7 @@ export default function NutritionScreen() {
   const [profile,  setProfile]    = useState(null); // user profile for goal calculation
   const [waterLogs, setWaterLogs] = useState([]);
   const [waterTotal, setWaterTotal] = useState(0);
+  const [allFoods, setAllFoods]   = useState([]);
 
   // Derive calorie + macro goals from profile (same formula as Dashboard)
   const calorieGoal = profile?.targetCalories || profile?.tdee || DEFAULT_CALORIE_GOAL;
@@ -433,6 +425,9 @@ export default function NutritionScreen() {
     loadProfile();
     loadHistory();
     loadWater();
+    
+    // Load food database in background
+    loadFoodDatabase().then(setAllFoods);
   }, []);
 
   const loadProfile = async () => {
@@ -779,13 +774,14 @@ export default function NutritionScreen() {
 
       {modal && (
         <AddFoodModal
-          visible={!!modal}
-          mealLabel={modal}
-          mealColor={CATS[modal]?.color || '#FF5722'}
-          initialData={editing?.foodData || null}
-          onClose={closeModal}
-          onSave={handleSave}
-        />
+        visible={!!modal}
+        mealLabel={modal}
+        mealColor={CATS[modal]?.color || '#FF5722'}
+        onClose={() => { setModal(null); setEditing(null); }}
+        onSave={handleSave}
+        initialData={editing?.foodData}
+        allFoods={allFoods}
+      />
       )}
     </SafeAreaView>
   );
