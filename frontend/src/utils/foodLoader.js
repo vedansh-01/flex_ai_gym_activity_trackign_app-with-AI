@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system';
 import Papa from 'papaparse';
+import { Alert } from 'react-native';
 
 /**
  * Loads and parses the food CSV file from assets.
@@ -9,18 +9,31 @@ import Papa from 'papaparse';
 export const loadFoodDatabase = async () => {
   try {
     const asset = Asset.fromModule(require('../../assets/data/food.csv'));
+    
+    // Ensure the asset is downloaded/available
     await asset.downloadAsync();
     
-    const csvContent = await FileSystem.readAsStringAsync(asset.localUri || asset.uri);
+    // Use fetch to read the asset content (more reliable for bundled assets in production)
+    const response = await fetch(asset.uri);
+    const csvContent = await response.text();
     
+    if (!csvContent || csvContent.length < 10) {
+      throw new Error('CSV content is empty or too short');
+    }
+
     return new Promise((resolve, reject) => {
       Papa.parse(csvContent, {
         header: true,
         skipEmptyLines: true,
         dynamicTyping: true,
         complete: (results) => {
+          if (!results.data || results.data.length === 0) {
+            resolve([]);
+            return;
+          }
+
           // Map CSV headers to app-internal format
-          // Header: Dish Name,Calories (kcal),Carbohydrates (g),Protein (g),Fats (g),...
+          // Expected Header: Dish Name,Calories (kcal),Carbohydrates (g),Protein (g),Fats (g)
           const mapped = results.data.map((item, index) => ({
             id: `csv-${index}`,
             name: item['Dish Name'] || 'Unknown Dish',
@@ -31,13 +44,19 @@ export const loadFoodDatabase = async () => {
             servingUnit: 'g',
             gramsPerUnit: 100 // Standard 100g basis
           }));
+          
+          console.log(`✅ Loaded ${mapped.length} foods from database.`);
           resolve(mapped);
         },
-        error: (err) => reject(err)
+        error: (err) => {
+          console.error('PapaParse Error:', err);
+          reject(err);
+        }
       });
     });
   } catch (error) {
     console.error('Error loading food CSV:', error);
+    // Alert.alert('Database Error', 'Failed to load food database. Search will be unavailable.');
     return [];
   }
 };
