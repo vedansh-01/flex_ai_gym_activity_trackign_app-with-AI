@@ -6,22 +6,16 @@ import * as storage from './storage';
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // Configure notification behavior
-if (!isExpoGo) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 /** Request permission for notifications */
 export async function requestPermissions() {
-  if (isExpoGo) {
-    console.warn('Notifications are not supported in Expo Go (SDK 53+). Please use a development build.');
-    return false;
-  }
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   
@@ -31,15 +25,18 @@ export async function requestPermissions() {
   }
   
   if (finalStatus !== 'granted') {
+    console.warn('Notification permission not granted. Current status:', finalStatus);
     return false;
   }
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+      name: 'FlexAI Reminders',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF5722',
+      enableVibration: true,
+      showBadge: true,
     });
   }
 
@@ -51,23 +48,37 @@ export async function scheduleDailyReminder(id, title, body, hour, minute) {
   // Cancel existing with same ID if any
   await cancelReminder(id);
 
-  if (isExpoGo) return null;
+  // We need permissions before scheduling
+  const hasPermission = await requestPermissions();
+  if (!hasPermission) return null;
 
-  const identifier = await Notifications.scheduleNotificationAsync({
-    content: { title, body, sound: true },
-    trigger: {
-      hour,
-      minute,
-      repeats: true,
-    },
-  });
+  try {
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: { 
+        title, 
+        body, 
+        sound: true,
+        // Crucial for Android 8+
+        priority: 'max',
+      },
+      trigger: {
+        hour,
+        minute,
+        repeats: true,
+      },
+    });
 
-  // Store the identifier in local storage to manage it later
-  const currentReminders = (await storage.getItem('reminders')) || {};
-  currentReminders[id] = { identifier, hour, minute, title, enabled: true };
-  await storage.setItem('reminders', currentReminders);
+    // Store the identifier in local storage to manage it later
+    const currentReminders = (await storage.getItem('reminders')) || {};
+    currentReminders[id] = { identifier, hour, minute, title, enabled: true };
+    await storage.setItem('reminders', currentReminders);
 
-  return identifier;
+    console.log(`✅ Scheduled ${id} at ${hour}:${minute}`);
+    return identifier;
+  } catch (error) {
+    console.error(`❌ Error scheduling ${id}:`, error);
+    return null;
+  }
 }
 
 /** Cancel a specific reminder */
@@ -76,7 +87,9 @@ export async function cancelReminder(id) {
   const reminder = currentReminders[id];
 
   if (reminder && reminder.identifier) {
-    await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
+    try {
+      await Notifications.cancelScheduledNotificationAsync(reminder.identifier);
+    } catch (e) {}
     delete currentReminders[id];
     await storage.setItem('reminders', currentReminders);
   }
@@ -91,7 +104,10 @@ export async function cancelAllReminders() {
 /** Schedule a reminder 15 minutes before the specified time */
 export async function scheduleWorkoutReminder(timeStr) {
   if (!timeStr) return;
-  const [h, m] = timeStr.split(':').map(Number);
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return;
+  
+  const [h, m] = parts.map(Number);
   
   // Calculate 15 mins prior
   let targetH = h;

@@ -73,7 +73,7 @@ function FoodItem({ food, onDelete }) {
         </View>
       </View>
       <View style={s.foodRight}>
-        <Text style={s.foodCal}>{parseFloat(food.cal).toFixed(1)}</Text>
+        <Text style={s.foodCal}>{parseFloat(food.calories).toFixed(1)}</Text>
         <Text style={s.foodCalLabel}>kcal</Text>
         <TouchableOpacity onPress={onDelete} style={{marginTop:4}}>
           <Ionicons name="trash-outline" size={16} color="#3F3F46"/>
@@ -119,7 +119,7 @@ function MealSection({ mealKey, meal, onAddFood, onDeleteFood }) {
 }
 
 // ─── Add Food Modal ───────────────────────────────────────────────────────────
-const EMPTY_FORM = { name:'', serving:'100', servingUnit:'g', cal:'', protein:'', carbs:'', fat:'' };
+const EMPTY_FORM = { name:'', serving:'100', servingUnit:'g', calories:'', protein:'', carbs:'', fats:'' };
 
 function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialData }) {
   const [form, setForm]         = useState(EMPTY_FORM);
@@ -194,10 +194,10 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
       name:        food.name || '',
       serving:     defaultQty,
       servingUnit: defaultUnit,
-      cal:     ((food.calories || 0) * scale).toFixed(1),
-      protein: ((food.protein  || 0) * scale).toFixed(1),
-      carbs:   ((food.carbs    || 0) * scale).toFixed(1),
-      fat:     ((food.fats     || 0) * scale).toFixed(1),
+      calories:    ((food.calories || 0) * scale).toFixed(1),
+      protein:     ((food.protein  || 0) * scale).toFixed(1),
+      carbs:       ((food.carbs    || 0) * scale).toFixed(1),
+      fats:        ((food.fats     || 0) * scale).toFixed(1),
     });
     setResults([]);
     setQuery('');
@@ -215,10 +215,10 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
         const scale = isPiece
           ? (qty * baseline.gramsPerUnit) / 100
           : qty / 100;
-        next.cal     = ((baseline.calories || 0) * scale).toFixed(1);
-        next.protein = ((baseline.protein  || 0) * scale).toFixed(1);
-        next.carbs   = ((baseline.carbs    || 0) * scale).toFixed(1);
-        next.fat     = ((baseline.fats     || 0) * scale).toFixed(1);
+        next.calories = ((baseline.calories || 0) * scale).toFixed(1);
+        next.protein  = ((baseline.protein  || 0) * scale).toFixed(1);
+        next.carbs    = ((baseline.carbs    || 0) * scale).toFixed(1);
+        next.fats     = ((baseline.fats     || 0) * scale).toFixed(1);
       }
       return next;
     });
@@ -226,25 +226,25 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
 
   const confirm = async () => {
     if (!form.name.trim()) { Alert.alert('Required', 'Please enter a food name.'); return; }
-    if (!form.cal)         { Alert.alert('Required', 'Please enter calories.');     return; }
+    if (!form.calories)     { Alert.alert('Required', 'Please enter calories.');     return; }
     setSaving(true);
     await onSave({
-      name:       form.name.trim(),
-      quantity:   parseFloat(form.serving) || 100,
-      servingUnit: form.servingUnit,
-      cal:     parseFloat(form.cal)     || 0,
-      protein: parseFloat(form.protein) || 0,
-      carbs:   parseFloat(form.carbs)   || 0,
-      fat:     parseFloat(form.fat)     || 0,
+      name:        form.name.trim(),
+      quantity:    parseFloat(form.serving) || 100,
+      unit:        form.servingUnit,
+      calories:    parseFloat(form.calories) || 0,
+      protein:     parseFloat(form.protein)  || 0,
+      carbs:       parseFloat(form.carbs)    || 0,
+      fats:        parseFloat(form.fats)     || 0,
     });
     setSaving(false);
   };
 
   const macros = [
-    { l:'Calories', k:'cal',     c:'#FF5722' },
-    { l:'Protein',  k:'protein', c:'#22C55E' },
-    { l:'Carbs',    k:'carbs',   c:'#3B82F6' },
-    { l:'Fat',      k:'fat',     c:'#EAB308' },
+    { l:'Calories', k:'calories', c:'#FF5722' },
+    { l:'Protein',  k:'protein',  c:'#22C55E' },
+    { l:'Carbs',    k:'carbs',    c:'#3B82F6' },
+    { l:'Fat',      k:'fats',     c:'#EAB308' },
   ];
 
   return (
@@ -376,7 +376,7 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
                     placeholder="0"
                     placeholderTextColor="#3F3F46"
                   />
-                  <Text style={s.macroCellUnit}>{m.k === 'cal' ? 'kcal' : 'g'}</Text>
+                  <Text style={s.macroCellUnit}>{m.k === 'calories' ? 'kcal' : 'g'}</Text>
                 </View>
               ))}
             </View>
@@ -594,10 +594,10 @@ export default function NutritionScreen() {
           id:      m._id,
           name:    f.name    || 'Unknown',
           serving: `${f.quantity || 0}${f.unit || 'g'}`,
-          cal:     f.calories || 0,
-          protein: f.protein  || 0,
-          carbs:   f.carbs    || 0,
-          fat:     f.fats     || 0,
+          calories: f.calories || 0,
+          protein:  f.protein  || 0,
+          carbs:    f.carbs    || 0,
+          fats:     f.fats     || 0,
         };
       }),
     };

@@ -24,12 +24,12 @@ export const loadFoodDatabase = async () => {
           const mapped = results.data.map((item, index) => ({
             id: `csv-${index}`,
             name: item['Dish Name'] || 'Unknown Dish',
-            calories: item['Calories (kcal)'] || 0,
-            carbs: item['Carbohydrates (g)'] || 0,
-            protein: item['Protein (g)'] || 0,
-            fats: item['Fats (g)'] || 0,
+            calories: parseFloat(item['Calories (kcal)']) || 0,
+            carbs: parseFloat(item['Carbohydrates (g)']) || 0,
+            protein: parseFloat(item['Protein (g)']) || 0,
+            fats: parseFloat(item['Fats (g)']) || 0,
             servingUnit: 'g',
-            gramsPerUnit: null
+            gramsPerUnit: 100 // Standard 100g basis
           }));
           resolve(mapped);
         },
