@@ -1,23 +1,11 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Use STARTTLS
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    // This helps avoid the ENETUNREACH IPv6 issue
-    rejectUnauthorized: false
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendOTP = async (email, otp) => {
   try {
-    const info = await transporter.sendMail({
-      from: `"FlexAI 💪" <${process.env.SMTP_USER}>`,
+    const { data, error } = await resend.emails.send({
+      from: 'FlexAI 💪 <onboarding@resend.dev>', // Free tier uses this sender
       to: email,
       subject: 'Your FlexAI Verification Code',
       html: `
@@ -47,7 +35,6 @@ const sendOTP = async (email, otp) => {
 
           <p style="color: #52525B; font-size: 12px; line-height: 1.6;">
             If you didn't request this, you can safely ignore this email.
-            Your account won't be created until you verify.
           </p>
 
           <hr style="border: none; border-top: 1px solid #27272A; margin: 24px 0;" />
@@ -57,9 +44,14 @@ const sendOTP = async (email, otp) => {
         </div>
       `,
     });
-    console.log(`✅ OTP email sent to ${email} (messageId: ${info.messageId})`);
+
+    if (error) {
+      console.error('❌ Resend Error:', error);
+      return;
+    }
+    console.log(`✅ OTP email sent via Resend to ${email} (id: ${data.id})`);
   } catch (err) {
-    console.error(`❌ Failed to send OTP to ${email}:`, err.message);
+    console.error(`❌ Failed to send OTP via Resend:`, err.message);
   }
 };
 
