@@ -289,7 +289,7 @@ function AddFoodModal({ visible, mealLabel, mealColor, onClose, onSave, initialD
                     ? Math.round((r.calories * r.gramsPerUnit) / 100)
                     : null;
                   return (
-                    <TouchableOpacity key={r._id} style={s.resultItem} onPress={() => selectFood(r)}>
+                    <TouchableOpacity key={r.id} style={s.resultItem} onPress={() => selectFood(r)}>
                       <View style={{flex:1}}>
                         <View style={{flexDirection:'row', alignItems:'center', gap:8}}>
                           <Text style={s.resultName}>{r.name}</Text>
