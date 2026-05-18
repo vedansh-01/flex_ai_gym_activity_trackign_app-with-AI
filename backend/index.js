@@ -5,7 +5,6 @@ const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const { enforceHttps } = require('./src/middleware/httpsRedirect');
 const Sentry = require("@sentry/node");
-const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
 dotenv.config();
 
@@ -15,11 +14,7 @@ const app = express();
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
-    integrations: [
-      nodeProfilingIntegration(),
-    ],
     tracesSampleRate: 1.0,
-    profilesSampleRate: 1.0,
   });
 }
 
