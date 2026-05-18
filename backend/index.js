@@ -1,18 +1,45 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
-const connectDB = require('./src/config/db');
+const { enforceHttps } = require('./src/middleware/httpsRedirect');
+const Sentry = require("@sentry/node");
+const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
 dotenv.config();
 
-// Connect to Database
-connectDB();
-
 const app = express();
 
-// Middleware
+// Initialize Sentry
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    integrations: [
+      nodeProfilingIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    profilesSampleRate: 1.0,
+  });
+}
+
+// Security Middleware
+app.use(enforceHttps);
+app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // prevent large payloads
+
+// Rate Limiting (100 requests per 15 minutes per IP)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later.' }
+});
+app.use(limiter);
+
+// Logger Middleware
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
@@ -24,23 +51,22 @@ app.use((req, res, next) => {
 
 // Basic Route
 app.get('/', (req, res) => {
-  res.send('FlexAI Backend API is running...');
+  res.send('FlexAI Secure AI Proxy is running...');
 });
 
-// Routes Placeholder
-app.use('/api/auth',     require('./src/routes/auth.routes'));
-app.use('/api/users',    require('./src/routes/user.routes'));
-app.use('/api/workouts', require('./src/routes/workout.routes'));
-app.use('/api/meals',    require('./src/routes/meal.routes'));
-app.use('/api/foods',    require('./src/routes/food.routes'));
-app.use('/api/water',    require('./src/routes/water.routes'));
-app.use('/api/chat',     require('./src/routes/chat.routes'));
+// Routes
+app.use('/api/chat', require('./src/routes/chat.routes'));
+app.use('/api/ai', require('./src/routes/ai.routes'));
+
+// The error handler must be registered before any other error middleware and after all controllers
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 const PORT = process.env.PORT || 5000;
 
-
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`FlexAI AI Proxy running on port ${PORT}`);
 });
 
 // Keep process alive

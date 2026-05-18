@@ -1,0 +1,31 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlexAI – Maestro E2E Navigation Flow
+# ──────────────────────────────────────────────────────────────────────────────
+appId: com.vedansh.flexai
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "TODAY'S CALORIES"
+    timeout: 10000
+
+# Tap Workout tab
+- tapOn: "Workout"
+- waitForAnimationToEnd
+
+# Tap Nutrition tab
+- tapOn: "Nutrition"
+- waitForAnimationToEnd
+
+# Tap AI Coach tab (Opens AI Coach screen)
+- tapOn: "AI Coach"
+- waitForAnimationToEnd
+
+# Press Android back button to return to the tabbed screens
+- back
+- waitForAnimationToEnd
+
+# Confirm we are back on a screen with the bottom tabs visible by tapping Home
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "TODAY'S CALORIES"
+    timeout: 5000

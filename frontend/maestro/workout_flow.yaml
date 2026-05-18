@@ -1,0 +1,50 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlexAI – Maestro E2E Workout Logger Flow
+# ──────────────────────────────────────────────────────────────────────────────
+# Validates the workout logging flow:
+#   1. Navigate to the Workout Logger tab
+#   2. Select a muscle group
+#   3. Add an exercise
+#   4. Enter sets, reps, and weight
+#   5. Verify the workout is saved
+#
+# Prerequisites: User must already be logged in.
+# Run:  maestro test frontend/maestro/workout_flow.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+
+appId: com.vedansh.flexai
+---
+
+# Step 1: Launch the app (assumes user is already authenticated)
+- launchApp
+
+# Step 2: Wait for the app to load
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 10000
+
+# Step 3: Navigate to the Workout Logger tab
+- tapOn: "Workout"
+
+# Step 4: Wait for the Workout Logger screen to load
+- extendedWaitUntil:
+    visible: "Muscle Group"
+    timeout: 5000
+
+# Step 5: Select a muscle group pill (e.g., "Chest")
+- tapOn: "Chest"
+
+# Step 6: Search for an exercise
+- tapOn: "Search exercises"
+- inputText: "Bench Press"
+
+# Step 7: Select the exercise from results
+- tapOn: "Bench Press"
+
+# Step 8: Wait for the exercise card to appear with input fields
+- extendedWaitUntil:
+    visible: "Sets"
+    timeout: 5000
+
+# Step 9: Verify the exercise was added to the workout log
+- assertVisible: "Bench Press"

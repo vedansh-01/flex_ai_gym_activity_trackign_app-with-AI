@@ -1,0 +1,499 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, TouchableOpacity, TextInput, ScrollView,
+  SafeAreaView, StyleSheet, StatusBar, Alert, ActivityIndicator
+} from 'react-native';
+import * as storage from '../utils/storage';
+import { Ionicons } from '@expo/vector-icons';
+import { ACTIVITY_LEVELS, calculateBMR, calculateTDEE, getMacroTargets, calculateBMI } from '../utils/fitnessCalc';
+import * as notificationService from '../utils/notificationService';
+
+import { API_URL } from '../config/apiConfig';
+import { theme } from '../theme/theme';
+
+const GENDERS = [
+  { key: 'male',   label: 'Male',   emoji: '♂️' },
+  { key: 'female', label: 'Female', emoji: '♀️' },
+  { key: 'other',  label: 'Other',  emoji: '⚧️' },
+];
+
+const GOALS = [
+  { key: 'weight_loss',        label: 'Lose Weight',        emoji: '📉', desc: 'Caloric deficit' },
+  { key: 'muscle_gain',        label: 'Build Muscle',       emoji: '💪', desc: 'Caloric surplus' },
+  { key: 'maintenance',        label: 'Stay Fit',           emoji: '⚖️', desc: 'Maintain physique' },
+  { key: 'body_recomposition', label: 'Body Recomp',        emoji: '🔄', desc: 'Lose fat & gain muscle' },
+];
+
+const WEEKLY_LOSS_OPTIONS = [
+  { value: 0.25, label: '0.25 kg/week', badge: '🐢 Gentle',      desc: '~275 kcal/day deficit' },
+  { value: 0.5,  label: '0.5 kg/week',  badge: '⚡ Recommended', desc: '~550 kcal/day deficit' },
+  { value: 0.75, label: '0.75 kg/week', badge: '💪 Aggressive',  desc: '~825 kcal/day deficit' },
+  { value: 1.0,  label: '1.0 kg/week',  badge: '🔥 Maximum',     desc: '~1100 kcal/day deficit' },
+];
+
+// All 4 options available for both weight_loss and body_recomposition
+
+export default function ProfileScreen({ onSaved, onLogout }) {
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+  const [profile, setProfile]           = useState<any>(null);
+
+  const [name, setName]                 = useState('');
+  const [age, setAge]                   = useState('');
+  const [gender, setGender]             = useState('');
+  const [weight, setWeight]             = useState('');
+  const [height, setHeight]             = useState('');
+  const [activityLevel, setActivity]    = useState('');
+  const [goal, setGoal]                 = useState('');
+  const [weeklyLossGoal, setWeeklyLoss] = useState<any>(null);
+  const [takesCreatine, setTakesCreatine] = useState(false);
+  const [creatineDose, setCreatineDose]   = useState('5');
+  const [workoutTime, setWorkoutTime]     = useState('17:00');
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
+
+  const needsLossStep = goal === 'weight_loss' || goal === 'body_recomposition';
+  const lossOptions   = WEEKLY_LOSS_OPTIONS; // all 4 options for both goals
+
+  useEffect(() => { fetchProfile(); }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const token = await storage.getItem('userToken');
+      const res   = await fetch(`${API_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setProfile(data);
+        setName(data.name || '');
+        setAge(data.profile?.age?.toString()    || '');
+        setGender(data.profile?.gender          || '');
+        setWeight(data.profile?.weight?.toString() || '');
+        setHeight(data.profile?.height?.toString() || '');
+        setActivity(data.profile?.activityLevel || '');
+        setGoal(data.profile?.goal              || '');
+        setWeeklyLoss(data.profile?.weeklyLossGoal ?? null);
+        setTakesCreatine(!!data.profile?.takesCreatine);
+        setCreatineDose(data.profile?.creatineDose?.toString() || '5');
+        setWorkoutTime(data.profile?.workoutTime || '17:00');
+
+        // Check if reminders are enabled in local storage
+        const reminders = await storage.getItem('reminders');
+        setRemindersEnabled(!!reminders && Object.keys(reminders).length > 0);
+      }
+    } catch (e) {
+      console.error('Profile fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await storage.deleteItem('userToken');
+            if (typeof onLogout === 'function') onLogout();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = await storage.getItem('userToken');
+      const res   = await fetch(`${API_URL}/users/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name,
+          age:            parseInt(age),
+          gender,
+          weight:         parseFloat(weight),
+          height:         parseFloat(height),
+          activityLevel,
+          goal,
+          weeklyLossGoal: needsLossStep ? weeklyLossGoal : null,
+          takesCreatine,
+          creatineDose: takesCreatine ? parseFloat(creatineDose) : 0,
+          workoutTime,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setProfile(data);
+
+        // Update notification if enabled
+        if (remindersEnabled) {
+          await notificationService.scheduleWorkoutReminder(workoutTime);
+        }
+
+        Alert.alert('✅ Saved', 'Your profile and workout reminder have been updated.');
+        if (typeof onSaved === 'function') onSaved(); // tell TabNavigator to refresh dashboard
+      } else {
+        Alert.alert('Error', data.message || 'Failed to save.');
+      }
+    } catch (e) {
+      Alert.alert('Network Error', 'Could not reach the server.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleReminders = async () => {
+    if (remindersEnabled) {
+      await notificationService.cancelAllReminders();
+      setRemindersEnabled(false);
+      Alert.alert('Notifications Disabled', 'All daily reminders have been removed.');
+    } else {
+      const success = await notificationService.setupDefaultReminders();
+      if (success) {
+        // Also schedule the personalized one
+        await notificationService.scheduleWorkoutReminder(workoutTime);
+        setRemindersEnabled(true);
+        Alert.alert('Notifications Enabled', 'Daily reminders for hydration, workout, and meals have been scheduled!');
+      } else {
+        Alert.alert('Permission Required', 'Please enable notifications in your device settings to use this feature.');
+      }
+    }
+  };
+
+  // Live calculation — updates instantly as user changes fields
+  const getLiveStats = () => {
+    const w = parseFloat(weight), h = parseFloat(height), a = parseInt(age);
+    if (!w || !h || !a || !gender || !activityLevel) return null;
+    const bmr    = calculateBMR(w, h, a, gender);
+    const tdee   = calculateTDEE(bmr, activityLevel);
+    const macros = getMacroTargets(tdee, goal || 'maintenance', w,
+      needsLossStep ? weeklyLossGoal : null);
+    const bmi    = calculateBMI(w, h);
+    return { bmr: Math.round(bmr), tdee, macros, bmi };
+  };
+  const liveStats = getLiveStats();
+
+  if (loading) {
+    return (
+      <SafeAreaView style={s.container}>
+        <ActivityIndicator color="#FF5722" size="large" style={{ flex: 1 }} />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" />
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Avatar Header ── */}
+        <View style={s.header}>
+          <View style={s.avatarCircle}>
+            <Text style={s.avatarText}>{name.charAt(0).toUpperCase() || '?'}</Text>
+          </View>
+          <Text style={s.headerName}>{name || 'Your Profile'}</Text>
+          <Text style={s.headerEmail}>{profile?.email || ''}</Text>
+        </View>
+
+        {/* ── Live Stats Cards ── */}
+        {liveStats && (
+          <View style={s.statsGrid}>
+            <View style={s.statCard}>
+              <Text style={s.statVal}>{liveStats.bmr}</Text>
+              <Text style={s.statLbl}>BMR (kcal)</Text>
+            </View>
+            <View style={[s.statCard, { borderColor: '#FF5722' }]}>
+              <Text style={[s.statVal, { color: '#FF5722' }]}>{liveStats.tdee}</Text>
+              <Text style={s.statLbl}>TDEE (kcal)</Text>
+            </View>
+            <View style={s.statCard}>
+              <Text style={s.statVal}>{liveStats.bmi.bmi}</Text>
+              <Text style={s.statLbl}>BMI ({liveStats.bmi.status})</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Personal Info ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>PERSONAL INFO</Text>
+          <Text style={s.fieldLabel}>Full Name</Text>
+          <TextInput style={s.input} value={name} onChangeText={setName}
+            placeholder="Your name" placeholderTextColor="#3F3F46" />
+          <Text style={s.fieldLabel}>Age</Text>
+          <TextInput style={s.input} value={age} onChangeText={setAge}
+            placeholder="e.g. 24" placeholderTextColor="#3F3F46" keyboardType="numeric" />
+          <Text style={s.fieldLabel}>Gender</Text>
+          <View style={s.optionRow}>
+            {GENDERS.map(g => (
+              <TouchableOpacity key={g.key}
+                style={[s.optionCard, gender === g.key && s.optionCardActive]}
+                onPress={() => setGender(g.key)}>
+                <Text>{g.emoji}</Text>
+                <Text style={[s.optionLabel, gender === g.key && { color: '#FF5722' }]}>{g.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Body Metrics ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>BODY METRICS</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.fieldLabel}>Weight (kg)</Text>
+              <TextInput style={s.input} value={weight} onChangeText={setWeight}
+                placeholder="75" placeholderTextColor="#3F3F46" keyboardType="decimal-pad" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.fieldLabel}>Height (cm)</Text>
+              <TextInput style={s.input} value={height} onChangeText={setHeight}
+                placeholder="175" placeholderTextColor="#3F3F46" keyboardType="decimal-pad" />
+            </View>
+          </View>
+        </View>
+
+        {/* ── Activity Level ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>ACTIVITY LEVEL</Text>
+          {ACTIVITY_LEVELS.map(a => (
+            <TouchableOpacity key={a.key}
+              style={[s.listCard, activityLevel === a.key && s.listCardActive]}
+              onPress={() => setActivity(a.key)}>
+              <Text style={s.listEmoji}>{a.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.listLabel, activityLevel === a.key && { color: '#FF5722' }]}>{a.label}</Text>
+                <Text style={s.listDesc}>{a.description}</Text>
+              </View>
+              {activityLevel === a.key && <Ionicons name="checkmark-circle" size={20} color="#FF5722" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Fitness Goal — 2×2 grid ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>FITNESS GOAL</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            {GOALS.map(g => (
+              <TouchableOpacity key={g.key}
+                style={[s.goalCard, goal === g.key && s.optionCardActive]}
+                onPress={() => {
+                  setGoal(g.key);
+                  // Clear weekly loss if switching to non-deficit goal
+                  if (g.key !== 'weight_loss' && g.key !== 'body_recomposition') {
+                    setWeeklyLoss(null);
+                  }
+                }}>
+                <Text style={{ fontSize: 26 }}>{g.emoji}</Text>
+                <Text style={[s.goalLabel, goal === g.key && { color: '#FF5722' }]}>{g.label}</Text>
+                <Text style={s.goalDesc}>{g.desc}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Weekly Loss Target (conditional) ── */}
+        {needsLossStep && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>WEEKLY WEIGHT LOSS TARGET</Text>
+            <Text style={s.subLabel}>How much weight do you want to lose per week?</Text>
+            {lossOptions.map(opt => (
+              <TouchableOpacity key={opt.value}
+                style={[s.listCard, weeklyLossGoal === opt.value && s.listCardActive]}
+                onPress={() => setWeeklyLoss(opt.value)}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                    <Text style={[s.listLabel, weeklyLossGoal === opt.value && { color: '#FF5722' }]}>
+                      {opt.label}
+                    </Text>
+                    <View style={{
+                      backgroundColor: weeklyLossGoal === opt.value ? '#FF5722' : '#27272A',
+                      borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{opt.badge}</Text>
+                    </View>
+                  </View>
+                  <Text style={s.listDesc}>{opt.desc}</Text>
+                </View>
+                {weeklyLossGoal === opt.value && <Ionicons name="checkmark-circle" size={20} color="#FF5722" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* ── Macro Targets Preview ── */}
+        {liveStats && (
+          <View style={s.macroCard}>
+            <Text style={s.sectionTitle}>YOUR DAILY TARGETS</Text>
+            {needsLossStep && weeklyLossGoal && (
+              <Text style={{ color: '#A1A1AA', fontSize: 12, marginBottom: 10 }}>
+                TDEE {liveStats.tdee} − {Math.round((weeklyLossGoal * 7700) / 7)} deficit
+                = {liveStats.macros.calories} kcal/day
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* ── Supplements & Hydration ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>SUPPLEMENTS & HYDRATION</Text>
+          <View style={[s.listCard, { borderStyle: 'dashed', backgroundColor: '#161616' }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.listLabel}>Take Creatine?</Text>
+              <Text style={s.listDesc}>Increases performance & hydration needs</Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => setTakesCreatine(!takesCreatine)}
+              style={[s.toggleBtn, takesCreatine && s.toggleBtnActive]}
+            >
+              <Text style={[s.toggleTxt, takesCreatine && { color: '#fff' }]}>{takesCreatine ? 'YES' : 'NO'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {takesCreatine && (
+            <View style={{ marginTop: 10 }}>
+              <Text style={s.fieldLabel}>Daily Dose (grams)</Text>
+              <TextInput 
+                style={s.input} 
+                value={creatineDose} 
+                onChangeText={setCreatineDose}
+                keyboardType="numeric" 
+                placeholder="5" 
+                placeholderTextColor="#3F3F46" 
+              />
+            </View>
+          )}
+
+          {weight && (
+            <View style={[s.macroCard, { borderColor: '#60A5FA33', marginTop: 10 }]}>
+              <Text style={[s.listLabel, { color: '#60A5FA', textAlign: 'center' }]}>💧 Personalized Water Goal</Text>
+              <Text style={[s.statVal, { fontSize: 24, textAlign: 'center', marginTop: 4 }]}>
+                {((parseFloat(weight) * 35 + (activityLevel ? ({sedentary:0, lightly_active:350, moderately_active:700, very_active:1000, extremely_active:1500} as Record<string, number>)[activityLevel] || 0 : 0) + (takesCreatine ? (parseFloat(creatineDose) || 0) * 100 : 0)) / 1000).toFixed(1)} L / day
+              </Text>
+              <Text style={[s.listDesc, { textAlign: 'center' }]}>Based on weight, activity, and supplements</Text>
+            </View>
+          )}
+
+          <View style={{ marginTop: 20 }}>
+            <Text style={s.sectionTitle}>WORKOUT REMINDER</Text>
+            <View style={s.listCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.listLabel}>Set Workout Time</Text>
+                <Text style={s.listDesc}>We will notify you 15 minutes before this time</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TextInput
+                  style={[s.input, { marginBottom: 0, width: 80, textAlign: 'center', paddingVertical: 8 }]}
+                  value={workoutTime}
+                  onChangeText={setWorkoutTime}
+                  placeholder="17:00"
+                  placeholderTextColor="#3F3F46"
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Save ── */}
+        <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+          {saving
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={s.saveBtnText}>💾  Save Profile</Text>
+          }
+        </TouchableOpacity>
+
+        {/* ── Notifications ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>APP SETTINGS</Text>
+          <TouchableOpacity 
+            style={[s.listCard, remindersEnabled && s.listCardActive]} 
+            onPress={toggleReminders}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#2A2A2A', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="notifications" size={20} color={remindersEnabled ? '#FF5722' : '#A1A1AA'} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.listLabel, remindersEnabled && { color: '#FF5722' }]}>Daily Reminders</Text>
+              <Text style={s.listDesc}>Get notified for water, workouts, and logging meals</Text>
+            </View>
+            <View style={[s.toggleBtn, remindersEnabled && s.toggleBtnActive]}>
+              <Text style={[s.toggleTxt, remindersEnabled && { color: '#fff' }]}>{remindersEnabled ? 'ON' : 'OFF'}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Logout ── */}
+        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+          <Text style={s.logoutBtnText}>Sign Out</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const MacroChip = ({ label, value, color }) => (
+  <View style={{ alignItems: 'center', flex: 1 }}>
+    <Text style={{ color, fontSize: 18, fontWeight: '800' }}>{value}</Text>
+    <Text style={{ color: '#A1A1AA', fontSize: 11, marginTop: 2 }}>{label}</Text>
+  </View>
+);
+
+const s = StyleSheet.create({
+  container:  { flex: 1, backgroundColor: theme.colors.background },
+  scroll:     { padding: theme.spacing.xl, paddingBottom: 60 },
+
+  header:       { alignItems: 'center', marginBottom: theme.spacing.xxl, paddingTop: 8 },
+  avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  avatarText:   { color: theme.colors.text, fontSize: 32, fontWeight: '900' },
+  headerName:   { color: theme.colors.text, fontSize: 22, fontWeight: '800' },
+  headerEmail:  { color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 },
+
+  statsGrid: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  statCard:  { flex: 1, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.lg, padding: 12, alignItems: 'center' },
+  statVal:   { color: theme.colors.text, fontSize: 18, fontWeight: '800' },
+  statLbl:   { color: theme.colors.textSecondary, fontSize: 10, marginTop: 4, textAlign: 'center' },
+
+  section:      { marginBottom: 20 },
+  sectionTitle: { color: theme.colors.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 },
+  subLabel:     { color: theme.colors.textSecondary, fontSize: 13, marginBottom: 12, marginTop: -6 },
+  fieldLabel:   { color: theme.colors.textSecondary, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 },
+  input:        { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.lg, paddingHorizontal: 16, paddingVertical: 13, color: theme.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 14 },
+
+  optionRow:      { flexDirection: 'row', gap: 10 },
+  optionCard:     { flex: 1, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.lg, paddingVertical: 14, alignItems: 'center', gap: 6 },
+  optionCardActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primarySoft },
+  optionLabel:    { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' },
+
+  // 2×2 goal grid
+  goalCard:  { width: '47%', backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.lg, padding: 14, alignItems: 'center', gap: 6 },
+  goalLabel: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  goalDesc:  { color: theme.colors.textTertiary, fontSize: 10, textAlign: 'center' },
+
+  listCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.lg, padding: 14, gap: 12, marginBottom: 8 },
+  listCardActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primarySoft },
+  listEmoji:      { fontSize: 22 },
+  listLabel:      { color: theme.colors.text, fontWeight: '700', fontSize: 14 },
+  listDesc:       { color: theme.colors.textSecondary, fontSize: 11, marginTop: 2 },
+
+  macroCard: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.xl, padding: 16, marginBottom: 20 },
+  macroRow:  { flexDirection: 'row', marginTop: 12 },
+
+  saveBtn:    { backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.lg, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
+  saveBtnText:{ color: theme.colors.text, fontWeight: '800', fontSize: 16 },
+
+  logoutBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                   borderWidth: 1, borderColor: '#3F1212', backgroundColor: '#1A0A0A',
+                   borderRadius: theme.borderRadius.lg, paddingVertical: 14, marginBottom: 32 },
+  logoutBtnText: { color: theme.colors.error, fontWeight: '700', fontSize: 15 },
+
+  toggleBtn: { backgroundColor: theme.colors.surfaceLight, paddingHorizontal: 16, paddingVertical: 8, borderRadius: theme.borderRadius.md },
+  toggleBtnActive: { backgroundColor: theme.colors.primary },
+  toggleTxt: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '800' },
+});

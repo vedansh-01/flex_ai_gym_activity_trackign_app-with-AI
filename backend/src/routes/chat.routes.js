@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/auth.middleware');
-const { getHistory, sendTextMessage } = require('../controllers/chat.controller');
+const { protect } = require('../middleware/auth');
+const { checkSubscription } = require('../middleware/checkSubscription');
+const { sendTextMessage } = require('../controllers/chat.controller');
 
-// Protected routes
-router.get('/history', protect, getHistory);
-router.post('/send', protect, sendTextMessage);
+// Protected AI Chat route (Fully Locked)
+router.post('/send', protect, checkSubscription, sendTextMessage);
 
 module.exports = router;

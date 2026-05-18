@@ -1,22 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import * as storage from '../src/utils/storage';
-
-import AuthScreen from '../src/screens/AuthScreen';
-import OnboardingScreen from '../src/screens/OnboardingScreen';
-import TabNavigator from '../src/navigation/TabNavigator';
-
-import { API_URL } from '../src/apiConfig';
+import { useRouter } from 'expo-router';
+import { API_URL } from '../src/config/apiConfig';
+import { theme } from '../src/theme/theme';
 
 export default function Index() {
-  const [screen, setScreen] = useState('loading');
+  const router = useRouter();
 
-  useEffect(() => { checkSession(); }, []);
+  useEffect(() => {
+    checkSession();
+  }, []);
 
   async function checkSession() {
     try {
       const token = await storage.getItem('userToken');
-      if (!token) { setScreen('auth'); return; }
+      if (!token) {
+        router.replace('/(auth)');
+        return;
+      }
 
       const res = await fetch(`${API_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -26,66 +28,34 @@ export default function Index() {
         const user = await res.json();
         if (!user.isVerified) {
           await storage.deleteItem('userToken');
-          setScreen('auth');
+          router.replace('/(auth)');
           return;
         }
-        setScreen(user.isOnboarded ? 'app' : 'onboarding');
+        
+        if (user.isOnboarded) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/onboarding');
+        }
       } else {
         await storage.deleteItem('userToken');
-        setScreen('auth');
+        router.replace('/(auth)');
       }
     } catch (e) {
-      setScreen('auth');
+      router.replace('/(auth)');
     }
-  }
-
-  const handleLoginSuccess = (token: any, user: any) => {
-    if (user && user.isVerified === false) {
-      setScreen('auth');
-    } else {
-      setScreen(user?.isOnboarded ? 'app' : 'onboarding');
-    }
-  };
-
-  const handleOnboardingComplete = () => {
-    setScreen('app');
-  };
-
-  const handleLogout = async () => {
-    await storage.deleteItem('userToken');
-    setScreen('auth');
-  };
-
-  if (screen === 'loading') {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator size="large" color="#FF5722" />
-        <Text style={styles.logo}>FLEX<Text style={styles.accent}>AI</Text></Text>
-      </View>
-    );
   }
 
   return (
-    <View style={styles.root}>
-      {screen === 'auth' && (
-        <AuthScreen onLoginSuccess={handleLoginSuccess} />
-      )}
-      {screen === 'onboarding' && (
-        <OnboardingScreen
-          onComplete={handleOnboardingComplete}
-          onLogout={handleLogout}
-        />
-      )}
-      {screen === 'app' && (
-        <TabNavigator onLogout={handleLogout} />
-      )}
+    <View style={styles.splash}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <Text style={styles.logo}>FLEX<Text style={styles.accent}>AI</Text></Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0C0C0C' },
-  splash: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0C0C0C' },
-  logo: { color: '#fff', fontSize: 42, fontWeight: '900', letterSpacing: -1 },
-  accent: { color: '#FF5722' },
+  splash: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background },
+  logo: { color: theme.colors.text, fontSize: 42, fontWeight: '900', letterSpacing: -1 },
+  accent: { color: theme.colors.primary },
 });

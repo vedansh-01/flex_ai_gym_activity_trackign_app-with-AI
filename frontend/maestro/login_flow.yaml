@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlexAI – Maestro E2E Login Flow
+# ──────────────────────────────────────────────────────────────────────────────
+# Validates the complete authentication flow:
+#   1. App launches correctly
+#   2. User enters email and password
+#   3. Taps the Sign In button
+#   4. Verifies successful navigation to the Dashboard
+#
+# Run:  maestro test frontend/maestro/login_flow.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+
+appId: com.vedansh.flexai
+---
+
+# Step 1: Wait for the app to fully load
+- launchApp
+
+# Step 2: Wait for the Auth screen to appear
+- assertVisible: "Sign In"
+
+# Step 3: Tap the email input field and enter credentials
+- tapOn: "Email"
+- inputText: "testuser@flexai.com"
+
+# Step 4: Tap the password input field and enter password
+- tapOn: "Password"
+- inputText: "TestPassword123!"
+
+# Step 5: Tap the Sign In button
+- tapOn: "Sign In"
+
+# Step 6: Wait for navigation to complete (allow network delay)
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 10000
+
+# Step 7: Verify the Dashboard screen loaded successfully
+- assertVisible: "Dashboard"
+
+# Step 8: Verify key dashboard elements are present
+- assertVisible: "Calories"

@@ -1,63 +1,79 @@
-const Chat = require('../models/Chat');
-const User = require('../models/User');
-const Workout = require('../models/Workout');
-const Meal = require('../models/Meal');
-const WaterLog = require('../models/WaterLog');
+const { supabase } = require('../config/supabase');
 const { OpenAI } = require('openai');
 
 const openai = new OpenAI({
-  baseURL: "https://text.pollinations.ai/openai",
-  apiKey: "no-key-needed"
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "http://localhost:5000",
+    "X-Title": "FlexAI Coach",
+  }
 });
 
-// Helpers
-
-// Fetches all relevant context without exposing PII (Name, Email, etc.)
 const buildPrivacyFilteredContext = async (userId) => {
-  const user = await User.findById(userId).select('age gender height weight activityLevel goal');
-  
-  // Last 3 workouts
-  const workouts = await Workout.find({ user: userId })
-    .sort({ date: -1 })
-    .limit(3)
-    .select('name date totalCaloriesBurned exercises');
+  try {
+    // 1. Fetch User Profile
+    const { data: user } = await supabase
+      .from('users')
+      .select('age, gender, height, weight')
+      .eq('id', userId)
+      .single();
 
-  // Today's nutrition
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const meals = await Meal.find({ user: userId, date: { $gte: today } })
-    .select('name totalCalories macros foods');
+    // 2. Fetch Recent Workouts
+    const { data: workouts } = await supabase
+      .from('workouts')
+      .select('id, workout_name, duration, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(3);
 
-  // Today's water
-  const waterLog = await WaterLog.findOne({ user: userId, date: { $gte: today } })
-    .select('consumedML goalML');
+    // Fetch exercises for those workouts
+    let workoutsStr = '';
+    if (workouts && workouts.length > 0) {
+      for (const w of workouts) {
+        const { data: exercises } = await supabase
+          .from('exercise_logs')
+          .select('exercise_name, sets, reps, weight')
+          .eq('workout_id', w.id);
+        
+        const exStr = exercises?.map(ex => `  > ${ex.exercise_name}: ${ex.sets} sets x ${ex.reps} reps @ ${ex.weight}kg`).join('\n') || '  > No exercises logged.';
+        workoutsStr += `- [${new Date(w.created_at).toISOString().split('T')[0]}] ${w.workout_name} (${w.duration || 0} min)\n${exStr}\n`;
+      }
+    }
 
-  return `
+    // 3. Fetch Today's Nutrition
+    const today = new Date();
+    today.setUTCHours(0,0,0,0);
+    
+    const { data: foods } = await supabase
+      .from('food_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('logged_at', today.toISOString());
+
+    let nutritionStr = 'No food logged today.';
+    if (foods && foods.length > 0) {
+      nutritionStr = foods.map(f => 
+        `- ${f.food_name}: ${f.calories}kcal (P:${f.protein||0} C:${f.carbs||0} F:${f.fats||0})`
+      ).join('\n');
+    }
+
+    // Combine
+    return `
 --- CONTEXT: ANONYMOUS USER METRICS ---
-Profile: ${user.age}yr old ${user.gender}, ${user.height}cm, ${user.weight}kg. Goal: ${user.goal}. Activity: ${user.activityLevel}.
+Profile: ${user?.age || '?'}yr old ${user?.gender || '?'}, ${user?.height || '?'}cm, ${user?.weight || '?'}kg.
 
 Recent Workouts (Last 3): 
-${workouts.map(w => {
-  const exercisesText = w.exercises.map(ex => 
-    `  > ${ex.name}: ` + ex.sets.map(s => `${s.reps}x${s.weight}kg`).join(', ')
-  ).join('\n');
-  return `- [${w.date.toISOString().split('T')[0]}] ${w.name} (${Math.round(w.totalCaloriesBurned||0)}kcal)\n${exercisesText}`;
-}).join('\n')}
+${workoutsStr || 'No recent workouts.'}
 
-Today's Meals: 
-${meals.map(m => {
-  const foodsText = m.foods.map(f => 
-    `  > ${f.name} (${f.quantity}${f.unit || 'g'}) - ${Math.round(f.calories)}kcal (P:${Math.round(f.protein||0)} C:${Math.round(f.carbs||0)} F:${Math.round(f.fats||0)})`
-  ).join('\n');
-  const mPro = m.macros?.protein || 0;
-  const mCar = m.macros?.carbs || 0;
-  const mFat = m.macros?.fats || 0;
-  return `- ${m.name}: ${Math.round(m.totalCalories)}kcal Total (P:${Math.round(mPro)} C:${Math.round(mCar)} F:${Math.round(mFat)})\n${foodsText}`;
-}).join('\n')}
-
-Today's Water: ${waterLog ? waterLog.consumedML : 0}mL / ${waterLog ? waterLog.goalML : '0'}mL.
+Today's Nutrition: 
+${nutritionStr}
 ---------------------------------------
 `;
+  } catch (error) {
+    console.error("Error building context:", error);
+    return "--- NO CONTEXT AVAILABLE ---";
+  }
 };
 
 const SYSTEM_PROMPT = `You are FlexAI, an elite, highly specialized personal trainer and nutritionist coach.
@@ -68,52 +84,53 @@ RULES:
 4. Never mention that you are an AI model.
 `;
 
-// ─── Controller Methods ────────────────────────────────────────────────────────
-
-exports.getHistory = async (req, res) => {
-  try {
-    let chat = await Chat.findOne({ user: req.user._id });
-    if (!chat) {
-      chat = await Chat.create({ user: req.user._id, messages: [] });
-    }
-    res.json(chat.messages);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error retrieving history' });
-  }
-};
-
 exports.sendTextMessage = async (req, res) => {
   try {
     const { text } = req.body; 
-    
-    // 1. Get Context
-    const contextStr = await buildPrivacyFilteredContext(req.user._id);
+    const userId = req.user.id;
 
-    // 2. Fetch history
-    let chat = await Chat.findOne({ user: req.user._id });
-    if (!chat) chat = await Chat.create({ user: req.user._id, messages: [] });
+    // 1. Get Context from Supabase
+    const contextStr = await buildPrivacyFilteredContext(userId);
 
-    // Format for OpenRouter API (Same as OpenAI: user, assistant, system)
+    // 2. Fetch recent chat history
+    const { data: history } = await supabase
+      .from('ai_recommendations')
+      .select('prompt, response, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    // 3. Format messages
     const openAiMessages = [
-      { role: 'system', content: SYSTEM_PROMPT + contextStr },
-      ...chat.messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: text }
+      { role: 'system', content: SYSTEM_PROMPT + contextStr }
     ];
 
-    // 3. Call Pollinations Free API (Bypass All Rate Limits)
+    if (history && history.length > 0) {
+      // History comes back newest first, we need oldest first
+      history.reverse().forEach(interaction => {
+        openAiMessages.push({ role: 'user', content: interaction.prompt });
+        openAiMessages.push({ role: 'assistant', content: interaction.response });
+      });
+    }
+    
+    openAiMessages.push({ role: 'user', content: text });
+
+    // 4. Call Gemma 3 12B on OpenRouter
     const completion = await openai.chat.completions.create({
-      model: "openai-fast",
+      model: "google/gemma-3-12b-it:free",
       messages: openAiMessages
     });
 
     const aiTextContent = completion.choices[0].message.content;
 
-    // 4. Save to DB
-    chat.messages.push({ role: 'user', content: text });
-    chat.messages.push({ role: 'assistant', content: aiTextContent });
-    await chat.save();
+    // 5. Save interaction to Supabase DB
+    await supabase.from('ai_recommendations').insert([{
+      user_id: userId,
+      prompt: text,
+      response: aiTextContent
+    }]);
 
-    // 5. Return response
+    // 6. Return response
     res.json({
        role: 'assistant',
        content: aiTextContent,
@@ -121,7 +138,7 @@ exports.sendTextMessage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Text Chat Error (OpenRouter):", error);
+    console.error("Text Chat Error:", error);
     res.status(500).json({ message: error.message || 'Coach failed to respond' });
   }
 };

@@ -1,0 +1,18 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlexAI – Maestro E2E Dashboard Flow (Logged-In User)
+# ──────────────────────────────────────────────────────────────────────────────
+appId: com.vedansh.flexai
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "TODAY'S CALORIES"
+    timeout: 10000
+- assertVisible: "Consumed"
+- assertVisible: "Macronutrients"
+- assertVisible: "Protein"
+- assertVisible: "Carbohydrates"
+- assertVisible: "Fat"
+- assertVisible: "Home"
+- assertVisible: "Workout"
+- assertVisible: "Nutrition"
+- assertVisible: "AI Coach"

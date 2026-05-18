@@ -1,0 +1,44 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# FlexAI – Maestro E2E Nutrition / Food Logging Flow
+# ──────────────────────────────────────────────────────────────────────────────
+# Validates the meal search and food logging flow:
+#   1. Navigate to the Nutrition tab
+#   2. Search for a food item
+#   3. Add it to the daily log
+#   4. Verify the log updates correctly
+#
+# Prerequisites: User must already be logged in.
+# Run:  maestro test frontend/maestro/food_flow.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+
+appId: com.vedansh.flexai
+---
+
+# Step 1: Launch the app (assumes user is already authenticated)
+- launchApp
+
+# Step 2: Wait for the dashboard
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 10000
+
+# Step 3: Navigate to the Nutrition tab
+- tapOn: "Nutrition"
+
+# Step 4: Wait for the Nutrition screen to load
+- extendedWaitUntil:
+    visible: "Calories"
+    timeout: 5000
+
+# Step 5: Tap the add food / search button
+- tapOn: "Add Food"
+
+# Step 6: Search for a food item
+- tapOn: "Search food"
+- inputText: "Chicken Breast"
+
+# Step 7: Select the food from results
+- tapOn: "Chicken Breast"
+
+# Step 8: Verify the food was added to the daily log
+- assertVisible: "Chicken Breast"
